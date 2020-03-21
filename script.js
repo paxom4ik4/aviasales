@@ -1,142 +1,249 @@
-const formSearch = document.querySelector(".form-search"),
-    inputCitiesFrom = formSearch.querySelector(".input__cities-from"),
-    dropdownCitiesFrom = formSearch.querySelector(".dropdown__cities-from"),
-    inputCitiesTo = formSearch.querySelector(".input__cities-to"),
-    dropdownCitiesTo = formSearch.querySelector(".dropdown__cities-to"),
-    inputDateDepart = formSearch.querySelector(".input__date-depart"),
-    buttonSearch = document.querySelector(".button__search");
+// Переменные
+const formSearch = document.querySelector('.form-search'),
+	  inputCitiesFrom = formSearch.querySelector('.input__cities-from'),
+	  dropdownCitiesFrom = formSearch.querySelector('.dropdown__cities-from'),
+	  inputCitiesTo = formSearch.querySelector('.input__cities-to'),
+	  dropdownCitiesTo = formSearch.querySelector('.dropdown__cities-to'),
+	  inputDateDepart = formSearch.querySelector('.input__date-depart'),
+	  cheapestTicket = document.getElementById('cheapest-ticket'),
+	  otherCheapTickets = document.getElementById('other-cheap-tickets'),
+	  body = document.querySelector('body');
 
+//Переменные (Ключ API, база городов и тд...)
+const CITY_API = 'http://api.travelpayouts.com/data/ru/cities.json',
+	PROXY = 'https://cors-anywhere.herokuapp.com/',
+	API_KEY = '52edab08f812dae6bf199045ebfa9d99',
+	CALENDAR = 'http://min-prices.aviasales.ru/calendar_preload',
+	MAX_COUNT = 5;
 
-const citiesApi = 'data/cities.json',
-API_KEY = '52edab08f812dae6bf199045ebfa9d99',
-PROXY = 'https://cors-anywhere.herokuapp.com/',
-CALENDAR = 'http://min-prices.aviasales.ru/calendar_preload';
+let city = []; // Массив городов
 
-let dayTime;
+// Функции 
+const getData = (url, callback, reject = console.error) => {
+    // Обработчик исключений 
+	try {
+		const request = new XMLHttpRequest();
+		request.open('GET', url);
+		request.addEventListener('readystatechange', () => {
+			if (request.readyState !== 4) return;
+
+			if (request.status === 200) {
+				callback(request.response);
+			} else {
+				reject(request.status);
+			}
+		});
     
-let city = [];
-
-const getData = (url, callback) => {
-
-    const request = new XMLHttpRequest();
-    request.open('GET', url);
-
-    request.addEventListener('readystatechange', () => {
-        if (request.readyState !== 4) return;
-        if (request.status === 200) {
-            callback(request.response);
-        } else {
-            alert(request.status);
-        }
-
-    });
-    request.send();
-};
-
+		request.send();
+	} catch (e) {
+		console.log(e);
+	}
+}
+// Функция которая отображает список с городами
 const showCity = (input, list) => {
-    list.textContent = "";
-    if (input.value !== ''){
+	list.textContent = '';
 
-        const filterCity = city.filter((item) => {
-            const fixItem = item.toLowerCase();
+	if (input.value !== '') {
 
-            return fixItem.includes(input.value.toLowerCase());
-        });
+		cheapestTicket.style.display = 'none'
+		otherCheapTickets.style.display = 'none'
 
-        filterCity.forEach((item) =>{
-            const li = document.createElement('li');
-            li.classList.add("dropdown__city");
-            li.textContent = item;
-            list.append(li);
-        });
+		const filterCity = city.filter((item) => {
+			const fixItem = item.name.toLowerCase();
+			return fixItem.startsWith(input.value.toLowerCase());
+		});
 
-    }
-}
-
-const selectCity = (event, input, list) => {
-    const target = event.target;
-    if(target.tagName.toLowerCase() === 'li'){
-        input.value = target.textContent;
-        list.textContent ='';
-    }
+		if (filterCity.length === 0) {
+			const li = document.createElement('li');
+			li.classList.add('dropdown__city', 'error');
+			li.textContent = 'Такого города нет'
+			list.append(li);
+		} else {
+			filterCity.forEach((item) => {
+				const li = document.createElement('li');
+				li.classList.add('dropdown__city');
+				li.textContent = item.name;
+				list.append(li);
+			})
+		};
+		return;
+	}
 };
 
-inputCitiesFrom.addEventListener('input', () =>{
-    showCity(inputCitiesFrom, dropdownCitiesFrom);
-});
-
-dropdownCitiesFrom.addEventListener('click', ()=> {
-    selectCity(event, inputCitiesFrom, dropdownCitiesFrom)
-});
-
-inputCitiesTo.addEventListener('input', () =>{
-    showCity(inputCitiesTo, dropdownCitiesTo);
-});
-
-dropdownCitiesTo.addEventListener('click', () =>{
-    selectCity(event, inputCitiesTo, dropdownCitiesTo)
-});
-
-getData(citiesApi, data => {
-    cities = JSON.parse(data).filter(item => item.name); 
-});
-
-const togle = (input, list) => {
-
-    input.value = event.target.innerHTML;
-    list.textContent = '';
+// Функция выбора города из списка
+const selectCity = (event, input, list) => {
+	const target = event.target;
+	if (target.tagName.toLowerCase() === 'li') {
+		input.value = target.textContent;
+		list.textContent = '';
+	}
 }
 
-getData(citiesApi, (data) => {
-    dayTime = JSON.parse(data);
+// Берем название город для определения самых дешевых билетов 
+const getNameCity = (code) => {
+	const objCity = city.find(item => item.code === code)
+	return objCity.name
+}
 
-    dayTime.forEach((item) => {
-        if (item.name != null) {
-            city.push(item.name,item.name_translations.en);
-        }
-        
-    });
+// Функция получения даты
+const getDate = (date) => {
+	return new Date(date).toLocaleDateString('ru-Ru', {
+		year: 'numeric',
+		month: 'long',
+		day: 'numeric',
+		hour: 'numeric',
+		minute: 'numeric',
+		timeZoneName: 'short'
+	})
 
-});
+}
+
+// Определяем вид полёта
+const getChanges = (num) => {
+	if (num) {
+		return num === 1 ? 'С одной пересадкой' : 'С двумя пересадками'
+	} else {
+		return 'Без пересадок'
+	}
+}
+
+const getLinkAviasales = (data) => {
+	let link = 'https://www.aviasales.ru/search/'
+	link += data.origin
+
+	const date = new Date(data.depart_date)
+	const day = date.getDate()
+	link += day < 10 ? '0' + day : day
+	const month = date.getMonth() + 1
+	link += month < 10 ? '0' + month : month
+
+	link += data.destination
+	link += '1' 
+
+	return link
+}
+
+//Функия по созданию карточки
+const createCard = (data) => {
+	const ticket = document.createElement('article')
+	ticket.classList.add('ticket')
+	let deep = ''
+	if (data) {
+		deep = `
+			<h3 class="agent">${data.gate}</h3>
+			<div class="ticket__wrapper">
+				<div class="left-side">
+					<a href="${getLinkAviasales(data)}" target="_blank" class="button button__buy">Купить
+						за ${data.value}₽</a>
+				</div>
+				<div class="right-side">
+					<div class="block-left">
+						<div class="city__from">Вылет из города
+							<span class="city__name">${getNameCity(data.origin)}</span>
+						</div>
+						<div class="date">${getDate(data.depart_date)}</div>
+					</div>
+
+					<div class="block-right">
+						<div class="changes">${getChanges(data.number_of_changes)}</div>
+						<div class="city__to">Город назначения:
+							<span class="city__name">${getNameCity(data.destination)}</span>
+						</div>
+					</div>
+				</div>
+			</div>`
+	} else {
+		deep = '<h3>К сожалением на указанную вами дату билетов нет</h3>'
+	}
+	ticket.insertAdjacentHTML('afterbegin', deep)
+	return ticket
+}
+
+const renderCheapDay = (cheapTicket) => {
+	cheapestTicket.style.display = 'block'
+	cheapestTicket.innerHTML = '<h2>Самый дешевый билет на выбранную дату</h2>'
+	const ticket = createCard(cheapTicket[0])
+	cheapestTicket.insertAdjacentElement('beforeend', ticket)
+}
+
+const renderCheapYear = (cheapTickets) => {
+	otherCheapTickets.style.display = 'block'
+	otherCheapTickets.innerHTML = '<h2>Самые дешевые билеты на другие даты</h2>'
+	cheapTickets.sort((a, b) => a.value - b.value)
+
+	for (let i = 0; i < cheapTickets.length && i < MAX_COUNT; i++) {
+		const ticket = createCard(cheapTickets[i])
+		otherCheapTickets.append(ticket)
+	}
+}
 
 const renderCheap = (data, date) => {
-    const cheapTicketYear = JSON.parse(data).best_prices;
-    const cheapTicketDay = cheapTicketYear.filter((item) => {
-        return item.depart_date === date;
-    });
-    renderCheapDay(cheapTicketDay);
-    renderCheapYear(cheapTicketYear);
-}
-const renderCheapDay = (ticket) => {
-    console.log(ticket);
-}
-const renderCheapYear = (tickets) => {
-    console.log(tickets);
+	const cheapTicketYear = JSON.parse(data).best_prices
+	const cheapTicketDay = cheapTicketYear.filter((item) => { return item.depart_date === date })
+
+	renderCheapDay(cheapTicketDay)
+	renderCheapYear(cheapTicketYear)
 }
 
-
-formSearch.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const fromName = dayTime.find((item) => {
-        return inputCitiesFrom.value === item.name || inputCitiesFrom.value === item.name_translations.en;
-    });
-    const toName = dayTime.find((item) => {
-        return inputCitiesTo.value === item.name ||inputCitiesTo.value === item.name_translations.en;
-    });
-    console.log(toName)
-    let formData = {
-        from: fromName.code,
-        to: toName.code,
-        when: inputDateDepart.value,
-    }
-    const requestData = `?depart_date=${formData.when}&origin=${formData.from}&destination=${formData.to}&one_way=true&token=${API_KEY}`;
-    getData(CALENDAR + requestData, (response) => {
-        renderCheap(response, formData.when);
-    });
+// Обработчики событий
+inputCitiesFrom.addEventListener('input', () => {
+	showCity(inputCitiesFrom, dropdownCitiesFrom)
 });
 
-getData(
-	CALENDAR + '?origin=SVX&destination=KGD&depart_date=2020-05-25&one_way=false',
-	data => {
-		console.log(JSON.parse(data).current_depart_date_prices);
+inputCitiesTo.addEventListener('input', () => {
+	showCity(inputCitiesTo, dropdownCitiesTo)
+});
+
+dropdownCitiesFrom.addEventListener('click', () => {
+	selectCity(event, inputCitiesFrom, dropdownCitiesFrom);
+});
+
+dropdownCitiesTo.addEventListener('click', () => {
+	selectCity(event, inputCitiesTo, dropdownCitiesTo);
+});
+
+body.addEventListener('click', () => {
+	dropdownCitiesFrom.innerHTML = '';
+	dropdownCitiesTo.innerHTML = '';
+});
+
+formSearch.addEventListener('submit', (event) => {
+	event.preventDefault()
+
+	const cityFromCode = city.find((item) => inputCitiesFrom.value === item.name).code
+	const cityToCode = city.find((item) => inputCitiesTo.value === item.name).code
+
+	const formData = {
+		from: cityFromCode,
+		to: cityToCode,
+		when: inputDateDepart.value
+	}
+
+	const requestData = CALENDAR +
+		`?depart_date=${formData.when}&origin=${formData.from}&destination=${formData.to}&one_way=true&token=${API_KEY}`;
+
+	getData(requestData, response => {
+		renderCheap(response, formData.when)
+	}, (error) => {
+		cheapestTicket.style.display = 'block'
+		cheapestTicket.innerHTML = '<h2 class ="error">В этом направлении нет рейсов</h2>'
+		console.error('Ошибка ', error)
+	})
+})
+
+// Вызов функции !
+
+getData(PROXY + CITY_API, (data) => {
+	city = JSON.parse(data).filter(item => item.name);
+
+	city.sort((a, b) => {
+		if (a.name < b.name) {
+			return -1;
+		}
+		if (a.name > b.name) {
+			return 1;
+		}
+		return 0;
+	})
+
 });
